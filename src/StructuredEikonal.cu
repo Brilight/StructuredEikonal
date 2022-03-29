@@ -7,6 +7,28 @@ itersPerBlock_(10), solverType_(0) {}
 
 StructuredEikonal::~StructuredEikonal() {}
 
+void StructuredEikonal::printspeed(std::ostream& out){
+  for(auto i: speeds_){
+	  for(auto j: i){
+		  for(auto k: j){
+			  out << k << "\t";
+		  }
+	  }
+  }
+  out << "\n";
+}
+
+void StructuredEikonal::printAns(std::ostream& out){
+  for(auto i: answer_){
+	  for(auto j: i){
+		  for(auto k: j){
+			  out << k << "\t";
+		  }
+	  }
+  }
+  out << "\n";
+}
+
 void StructuredEikonal::writeNRRD(std::string filename) {
   std::fstream out(filename.c_str(), std::ios::out | std::ios::binary);
   out << "NRRD0001\n";
@@ -193,6 +215,7 @@ void StructuredEikonal::initialization() {
   this->CheckCUDAMemory();
 }
 
+//here init host data
 void StructuredEikonal::map_generator() {
   double pi = 3.141592653589793238462643383;
   this->speeds_ = std::vector<std::vector<std::vector<double> > >(
@@ -218,8 +241,121 @@ void StructuredEikonal::map_generator() {
   }
 }
 
+void StructuredEikonal::map_generator(char* fileName) {
+  this->speeds_ = std::vector<std::vector<std::vector<double> > >(
+    this->width_, std::vector<std::vector<double> >(
+    this->height_, std::vector<double>(this->depth_,1.)));
+
+  std::ifstream indata;
+	int id = 0;
+	int iz, iy, ix;
+	int z = this->depth_;
+	int y = this->width_;
+	int x = this->height_;
+	int size = z*y*x;
+	float tmp;
+	indata.open(fileName);
+	if (!indata) {
+		std::cerr << "cant open file\n";
+		exit(1);
+	}
+	while (!indata.eof()&&id!=size) {
+		iz = id / (x * y);
+		iy = (id / x) % y;
+		ix = id % x;
+		indata >> tmp;
+		this->speeds_[iz][iy][ix] = 1/tmp;
+		id++;
+	}
+	indata.close();
+}
+
 void StructuredEikonal::setSeeds(std::vector<std::array<size_t, 3> > seeds) {
   this->seeds_ = seeds;
+}
+
+void StructuredEikonal::boundInit() {
+  if (this->verbose_) {
+    std::cout << "Loading seed volume..." << std::endl;
+  }
+  uint volSize, blockNum;
+  int nx, ny, nz, blklength;
+
+  nx = this->memoryStruct_.xdim;
+  ny = this->memoryStruct_.ydim;
+  nz = this->memoryStruct_.zdim;
+  volSize = this->memoryStruct_.volsize;
+  blklength = this->memoryStruct_.blklength;
+  blockNum = this->memoryStruct_.blknum;
+
+  // copy input volume to host memory
+  // make each block to be stored contiguously in 1D memory space
+  uint idx = 0;
+  uint blk_idx = 0;
+  uint list_idx = 0;
+  uint nActiveBlock = 0;
+
+  for(int zStr = 0; zStr < nz; zStr += blklength) {
+    for(int yStr = 0; yStr < ny; yStr += blklength) {
+      for(int xStr = 0; xStr < nx; xStr += blklength) {
+        // for each block
+        bool isSeedBlock = false;
+
+        for(int z=zStr; z<zStr+blklength; z++) {
+          for(int y=yStr; y<yStr+blklength; y++) {
+            for(int x=xStr; x<xStr+blklength; x++) {
+              this->memoryStruct_.h_sol[idx] = INF;
+              if (this->seeds_.empty()) {
+                if (x == nx/2 && y == ny/2 && z == nz/2) {
+                  this->memoryStruct_.h_sol[idx] = 0;
+                  isSeedBlock = true;
+                  if (this->verbose_) {
+                    printf("v1: %d is Selected bt source \n",idx);
+                  }
+                }
+              } else {
+                for(size_t i = 0; i < this->seeds_.size(); i++) {
+                  if (this->seeds_[i][0] == x && 
+                    this->seeds_[i][1] == y && 
+                    this->seeds_[i][2] == z) {
+                    this->memoryStruct_.h_sol[idx] = 0;
+                    isSeedBlock = true;
+                    if (this->verbose_) {
+                      printf("v2: %d is Selected bt source \n",idx);
+                    }
+                  }
+                }
+              }
+              idx++;
+            }
+          }
+        }
+        ///////////////////////////////////////////////
+        if(isSeedBlock) {
+          if (this->verbose_) {
+            printf("%d,%d,%d is Seed Block \n",zStr,yStr,xStr);
+          }
+          this->memoryStruct_.h_listVol[blk_idx] = true;
+          this->memoryStruct_.h_listed[blk_idx] = true;
+          this->memoryStruct_.h_list[list_idx] = blk_idx;
+          list_idx++;
+          nActiveBlock++;
+        } else {
+          this->memoryStruct_.h_listVol[blk_idx] = false;
+          this->memoryStruct_.h_listed[blk_idx] = false;
+        }
+        blk_idx++;
+      }
+    }
+  }
+  this->memoryStruct_.nActiveBlock = nActiveBlock;
+  // initialize GPU memory with host memory
+  CUDA_SAFE_CALL( cudaMemcpy(this->memoryStruct_.d_sol, this->memoryStruct_.h_sol, volSize*sizeof(DOUBLE), cudaMemcpyHostToDevice) );
+  CUDA_SAFE_CALL( cudaMemcpy(this->memoryStruct_.t_sol, this->memoryStruct_.h_sol, volSize*sizeof(DOUBLE), cudaMemcpyHostToDevice) );
+  CUDA_SAFE_CALL( cudaMemcpy(this->memoryStruct_.d_list, this->memoryStruct_.h_list, nActiveBlock*sizeof(uint), cudaMemcpyHostToDevice) );
+  CUDA_SAFE_CALL( cudaMemcpy(this->memoryStruct_.d_listVol, this->memoryStruct_.h_listVol, blockNum*sizeof(bool), cudaMemcpyHostToDevice) );
+  // initialize GPU memory with constant value
+  CUDA_SAFE_CALL( cudaMemset(this->memoryStruct_.d_con, 1, volSize*sizeof(bool)) );
 }
 
 void StructuredEikonal::useSeeds() {
@@ -258,7 +394,7 @@ void StructuredEikonal::useSeeds() {
                   this->memoryStruct_.h_sol[idx] = 0;
                   isSeedBlock = true;
                   if (this->verbose_) {
-                    printf("%d is Selected bt source \n",idx);
+                    printf("v1: %d is Selected bt source \n",idx);
                   }
                 }
               } else {
@@ -269,7 +405,7 @@ void StructuredEikonal::useSeeds() {
                     this->memoryStruct_.h_sol[idx] = 0;
                     isSeedBlock = true;
                     if (this->verbose_) {
-                      printf("%d is Selected bt source \n",idx);
+                      printf("v2: %d is Selected bt source \n",idx);
                     }
                   }
                 }

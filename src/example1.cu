@@ -9,6 +9,8 @@
 //
 
 #include <StructuredEikonal.h>
+#include<fstream>
+#include<iostream>
 
 int main(int argc, char** argv) {
   size_t itersPerBlock = 10, size = 256, type = 0;
@@ -38,11 +40,20 @@ int main(int argc, char** argv) {
     i++;
   }
   StructuredEikonal data(verbose);
-  data.setDims(size,size,size);
+  data.setDims(40, 1500, 1500);
   data.setMapType(type);
   data.setItersPerBlock(itersPerBlock);
   data.setSeeds({ { { { 0, 0, 0 } } } }); // set 0 0 0 voxel to zero
   data.solveEikonal();
+
+  std::ofstream fmmout;
+  fmmout.open("speed file");
+ // data.printspeed(fmmout);
+
+  std::ofstream answrite;
+  answrite.open("Tumans");
+//  data.printAns(answrite);
+
   data.writeNRRD(name);
   return 0;
 }

@@ -5,6 +5,7 @@
 //
 // 2016. 2. 4
 //
+#include<chrono>
 
 #include <cstdio>
 #include <string>
@@ -116,11 +117,13 @@ void runEikonalSolverSimple(CUDAMEMSTRUCT &cmem, bool verbose)
   sdkCreateTimer(&timer_list2);
   sdkCreateTimer(&timer_coarse);
 
+
   sdkStartTimer(&timer_total);
 
   uint nTotalBlockProcessed = 0;
 
   // start solver
+  auto solve_start = std::chrono::steady_clock::now();
   while(nActiveBlock > 0)
   {
     //CUT_SAFE_CALL( cudaMemcpy(cmem.d_sol, cmem.h_sol, 64*nActiveBlock*sizeof(DOUBLE), cudaMemcpyHostToDevice) );
@@ -296,7 +299,13 @@ void runEikonalSolverSimple(CUDAMEMSTRUCT &cmem, bool verbose)
     if (verbose) {
       printf("Iteration : %d\n", nTotalIter);
     }
-  }
+  }	
+  auto solve_end = std::chrono::steady_clock::now();
+  std::chrono::duration<double> time_solved = solve_end - solve_start;
+
+  std::cerr << "<<<\ntime:\t" << time_solved.count() << "s\n<<<\n";
+
+
   sdkStopTimer(&timer_total);
 
   if (verbose) {

@@ -5,6 +5,7 @@
 #include <array>
 #include <string>
 #include <fstream>
+#include <iostream>
 #include "common_def.h"
 #include "cuda_fim.h"
 
@@ -19,6 +20,8 @@ public:
   void setSpeeds(std::vector<std::vector<std::vector<double> > > speed);
   void setSeeds(std::vector<std::array<size_t, 3> > seeds);
   void writeNRRD(std::string filename);
+  void printspeed(std::ostream& out = std::cout);
+  void printAns(std::ostream& out);
   std::vector< std::vector< std::vector<double> > > getFinalResult();
   /**
   * Runs the algorithm.
@@ -36,8 +39,11 @@ private:
   void set_attribute_mask();
   void initialization();
   void map_generator();
+
+void map_generator(char* fileName);
   void get_solution();
   void useSeeds();
+void boundInit();
   //data
   bool verbose_;
   bool isCudaMemCreated_;
