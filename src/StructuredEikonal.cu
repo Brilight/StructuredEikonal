@@ -250,8 +250,8 @@ void StructuredEikonal::map_generator(char* fileName) {
 	int id = 0;
 	int iz, iy, ix;
 	int z = this->depth_;
-	int y = this->width_;
-	int x = this->height_;
+	int y = this->height_;
+	int x = this->width_;
 	int size = z*y*x;
 	float tmp;
 	indata.open(fileName);
@@ -259,12 +259,14 @@ void StructuredEikonal::map_generator(char* fileName) {
 		std::cerr << "cant open file\n";
 		exit(1);
 	}
+	std::cerr << z << " " << y << " " << x << " " << std::endl;
+	std::cerr << this->width_ << " " << this->height_ << " " << this->depth_ << " " << std::endl;
 	while (!indata.eof()&&id!=size) {
 		iz = id / (x * y);
 		iy = (id / x) % y;
 		ix = id % x;
 		indata >> tmp;
-		this->speeds_[iz][iy][ix] = 1/tmp;
+		this->speeds_[ix][iy][iz] = 1/tmp;
 		id++;
 	}
 	indata.close();
@@ -448,7 +450,7 @@ void StructuredEikonal::setMapType(size_t t) {
 
 void StructuredEikonal::solveEikonal() {
   if (this->speeds_.empty()) {
-    this->map_generator();
+    this->map_generator("/home/kunpeng/data/data/Eikonaldata/3DSpeedMap.dat");
   }
   this->isCudaMemCreated_ = false;
   this->initialization();

@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     i++;
   }
   StructuredEikonal data(verbose);
-  data.setDims(40, 1500, 1500);
+  data.setDims(1500, 1500, 50);
   data.setMapType(type);
   data.setItersPerBlock(itersPerBlock);
   data.setSeeds({ { { { 0, 0, 0 } } } }); // set 0 0 0 voxel to zero
